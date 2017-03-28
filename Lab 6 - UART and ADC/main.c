@@ -18,7 +18,7 @@ volatile unsigned int keypadArray[4][4]={
 
 void main(void) {
 
-	WDTCTL = WDTPW | WDTHOLD;	// Stop watchdog timer
+	WDTCTL = WDTPW | WDTHOLD; // Stop watchdog timer
 
 	uartInit();
 
@@ -32,6 +32,7 @@ void main(void) {
 	// PWM Out
 	P2DIR |= BIT1;
 	P2SEL |= BIT1;
+	TA1CTL |= TASSEL_2 + MC_1;
 	TA1CCTL1 |= OUTMOD_7;
 	TA1CCR1 = 0;
 	pwm[0] = 0;
@@ -47,9 +48,9 @@ void main(void) {
 		if(dispFlag){
 			if(dispNum == 0x0F){
 				while (!(IFG2&UCA0TXIFG));              // USCI_A0 TX buffer ready?
-				UCA0TXBUF = 0x0A;						// TX -> Line Feed
+				UCA0TXBUF = 0x0A; // TX -> Line Feed
 				while (!(IFG2&UCA0TXIFG));              // USCI_A0 TX buffer ready?
-				UCA0TXBUF = 0x0D;						// Tx -> Carriage return
+				UCA0TXBUF = 0x0D; // Tx -> Carriage return
 			}
 			else{
 				dispNum += 0x30;
@@ -77,9 +78,9 @@ void adcInit(void){
 void displayAdc(void){
 	volatile unsigned int ADC_value=0;
 	char output[4];
-	__delay_cycles(1000);				// Wait for ADC Ref to settle
-	ADC10CTL0 |= ENC + ADC10SC;			// Sampling and conversion start
-	__bis_SR_register(CPUOFF + GIE);	// Low Power Mode 0 with interrupts enabled
+	__delay_cycles(1000); // Wait for ADC Ref to settle
+	ADC10CTL0 |= ENC + ADC10SC; // Sampling and conversion start
+	__bis_SR_register(CPUOFF + GIE); // Low Power Mode 0 with interrupts enabled
 	ADC_value = ADC10MEM;
 
 	num2str(output,ADC_value,4);
@@ -89,17 +90,17 @@ void displayAdc(void){
 void keypadInit(void){
 
 	// Output Init
-	P1DIR |= BIT3 + BIT4;					// Keypad
+	P1DIR |= BIT3 + BIT4; // Keypad
 	// Keypad Init
-	P2REN |= BIT0 + BIT2 + BIT3 + BIT5;		// Enable polling resistor
-	P2OUT |= BIT0 + BIT2 + BIT3 + BIT5;		// Pull up Resistor
-	P2IE |= BIT0 + BIT2 + BIT3 + BIT5;		// Enable Interrupt
-	P2IES |= BIT0 + BIT2 + BIT3 + BIT5;		// High/Low interrupt
-	P2IFG = 0x00;							// Clear Interrupt Flag
+	P2REN |= BIT0 + BIT2 + BIT3 + BIT5; // Enable polling resistor
+	P2OUT |= BIT0 + BIT2 + BIT3 + BIT5; // Pull up Resistor
+	P2IE |= BIT0 + BIT2 + BIT3 + BIT5; // Enable Interrupt
+	P2IES |= BIT0 + BIT2 + BIT3 + BIT5; // High/Low interrupt
+	P2IFG = 0x00; // Clear Interrupt Flag
 	//Timer Setup
 	TA1CCR0 = 0xFFFF;
-	TA1CTL = TASSEL_2 + MC_2;				// SMCLK, contmode,
-	TA1CCTL0 |= CCIE;						// Timer A1 interrupt enable
+	TA1CTL = TASSEL_2 + MC_2; // SMCLK, contmode,
+	TA1CCTL0 |= CCIE; // Timer A1 interrupt enable
 
 }
 
@@ -128,24 +129,39 @@ __interrupt void ADC10_ISR (void)
 __interrupt void USCI0RX_ISR(void)
 {
 	volatile char inChar;
-	inChar = UCA0RXBUF;						// Set Received char to inCha
+	inChar = UCA0RXBUF; // Set Received char to inCha
 
 	if(pwm[0]){
 		if(0x29 < inChar && inChar < 0x3A)
 		{
 			pwm[pwm[0]] = (inChar - 0x30);
 			while (!(IFG2&UCA0TXIFG));              // USCI_A0 TX buffer ready?
-			UCA0TXBUF = inChar;						// TX -> Line Feed
+			UCA0TXBUF = inChar; // TX -> Line Feed
 			pwm[0]++;
 			if(pwm[0]>2){
 				pwm[0] = 0;
 				while (!(IFG2&UCA0TXIFG));              // USCI_A0 TX buffer ready?
-				UCA0TXBUF = 0x0A;						// TX -> Line Feed
+				UCA0TXBUF = 0x0A; // TX -> Line Feed
 				while (!(IFG2&UCA0TXIFG));              // USCI_A0 TX buffer ready?
 				UCA0TXBUF = 0x0D;
-				char out[] = "PWM Set";
-				outputMessage(out,7,1);
+				char out[] = "PWM Set to 0x%";
+				out[11] = 0x30 + pwm[1];
+				out[12] = 0x30 + pwm[2];
+				outputMessage(out,14,1);
 			}
+		}
+		else if(pwm[0] = 1){
+			pwm[2] = pwm[1];
+			pwm[1] = 0;
+			pwm[0] = 0;
+			while (!(IFG2&UCA0TXIFG));              // USCI_A0 TX buffer ready?
+			UCA0TXBUF = 0x0A; // TX -> Line Feed
+			while (!(IFG2&UCA0TXIFG));              // USCI_A0 TX buffer ready?
+			UCA0TXBUF = 0x0D;
+			char out[] = "PWM Set to 0x%";
+			out[11] = 0x30 + pwm[1];
+			out[12] = 0x30 + pwm[2];
+			outputMessage(out,14,1);
 		}
 	}
 	if(inChar=='Q' || inChar=='q')
@@ -172,9 +188,10 @@ __interrupt void TIMERA11_ISR(void)
 	bitmask = (row << 3) + ((P1OUT & ~BIT3) & ~BIT4);
 	P1OUT = bitmask;
 
-	pwmVal = 100 - pwm[1]*10+pwm[2];
-	TA1CCR1 = 0xFFFF/pwmVal/100;
-
+	if(pwm[0] == 0){
+		pwmVal = pwm[1]*10+pwm[2];
+		TA1CCR1 = 0x28F*pwmVal;
+	}
 
 }//timerA1 interrupt()
 
@@ -211,5 +228,3 @@ __interrupt void Port_2(void)
 
 	P2IFG = 0x00;
 }
-
-
