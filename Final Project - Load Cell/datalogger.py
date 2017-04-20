@@ -4,8 +4,6 @@ import serial
 import sys
 
 class Application(Frame):
-
-
     
     def quitApp(self):
         self.logging = 0;
@@ -13,18 +11,35 @@ class Application(Frame):
 
     def stop_logging(self):
         self.logging = 0
-    
+
+    # Start logging thread
     def start_logging(self):
+        threading.Thread(target=self._start_logging).start()
+
+    # Logging thread
+    def _start_logging(self):
         self.logging = 1
+        f = open('current.csv','w')
+        f.write('')
+        f.close()
+        #port = serial.Serial("/dev/ttyUSB0")
+        self.fName = self.fileName.get()
+
         while self.logging:
-            self.logging = self.logging +1
-            print "Data Logging: ",self.logging
-        print "Data Logging Stopped"
-        
+            self.logging += 1
+            #self.dataIn = port.readline()
+            self.dataIn = 'Test,'
+            f = open('current.csv','a+')
+            f2 = open(self.fName,'a+')
+            f.write(self.dataIn)
+            f2.write(self.dataIn)
+            f.close()
+            f.close()
+            print "Data Logging ",self.logging,": ",self.dataIn
+            
+        print "Data Logging Stopped to:",self.fName
 
-    def start_log(self):
-        threading.Thread(target=self.start_logging).start()
-
+    # Create GUI elements
     def createWidgets(self):
         self.QUIT = Button(self)
         self.QUIT["text"] = "QUIT"
@@ -34,7 +49,7 @@ class Application(Frame):
 
         self.start = Button(self)
         self.start["text"] = "Start",
-        self.start["command"] = self.start_log
+        self.start["command"] = self.start_logging
         self.start.grid(row=2,column=1,pady=20)
 
         self.stop = Button(self)
@@ -55,8 +70,8 @@ class Application(Frame):
 root = Tk()
 app = Application(master=root)
 app.master.title("Load-Cell Datalogger")
-app.master.minsize(400,400)
+app.master.minsize(400,200)
 app.mainloop()
 root.destroy()
 
-print "Load-Cell Datalogger quit sucessfully"
+print "'Load-Cell Datalogger' quit sucessfully"
