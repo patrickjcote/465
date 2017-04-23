@@ -13,8 +13,10 @@ class Application(Frame):
 
     def stop_logging(self):
         self.logging = 0
+
+    def plotData(self):
         d = np.genfromtxt('current.csv',delimiter=',',dtype=int).tolist()
-        t = (np.arange(0.,len(f),1)/10).tolist()
+        t = (np.arange(0.,len(d),1)/10).tolist()
         del t[-1]
         del d[-1]
         plt.plot(t,d)
@@ -60,12 +62,17 @@ class Application(Frame):
         self.start = Button(self)
         self.start["text"] = "Start",
         self.start["command"] = self.start_logging
-        self.start.grid(row=2,column=1,pady=20)
+        self.start.grid(row=2,column=1,pady=20) 
 
         self.stop = Button(self)
         self.stop["text"] = "Stop",
         self.stop["command"] = self.stop_logging
-        self.stop.grid(row=2,column=3,pady=20)
+        self.stop.grid(row=2,column=2,pady=20)
+
+        self.plot = Button(self)
+        self.plot["text"] = "Plot",
+        self.plot["command"] = self.plotData
+        self.plot.grid(row=2,column=3,pady=20)
 
         self.fileName = Entry(self)
         self.fileName.insert(0,"File Name.csv")
