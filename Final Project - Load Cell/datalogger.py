@@ -2,6 +2,8 @@ import threading
 from Tkinter import *
 import serial
 import sys
+import matplotlib.pyplot as plt
+import numpy as np
 
 class Application(Frame):
     
@@ -11,6 +13,14 @@ class Application(Frame):
 
     def stop_logging(self):
         self.logging = 0
+        d = np.genfromtxt('current.csv',delimiter=',',dtype=int).tolist()
+        t = (np.arange(0.,len(f),1)/10).tolist()
+        del t[-1]
+        del d[-1]
+        plt.plot(t,d)
+        plt.ylabel('Force')
+        plt.xlabel('Time [s]')
+        plt.show()
 
     # Start logging thread
     def start_logging(self):
@@ -28,7 +38,7 @@ class Application(Frame):
         while self.logging:
             self.logging += 1
             #self.dataIn = port.readline()
-            self.dataIn = 'Test,'
+            self.dataIn = str(self.logging)+','
             f = open('current.csv','a+')
             f2 = open(self.fName,'a+')
             f.write(self.dataIn)
@@ -74,4 +84,4 @@ app.master.minsize(400,200)
 app.mainloop()
 root.destroy()
 
-print "'Load-Cell Datalogger' quit sucessfully"
+print "datalogger.py quit sucessfully"
