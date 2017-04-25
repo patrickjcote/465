@@ -1,5 +1,6 @@
 import threading
 from Tkinter import *
+import tkMessageBox
 import serial
 import sys
 import matplotlib.pyplot as plt
@@ -12,20 +13,44 @@ class Application(Frame):
     def quitApp(self):
         self.logging = 0;
         self.quit()
+        self.quit()
 
     def stop_logging(self):
         self.logging = 0
 
     def plotData(self):
-        d = np.genfromtxt('current.csv',delimiter=',',dtype=int).tolist()
+        d = np.genfromtxt(self.fileName.get(),delimiter=',',dtype=int).tolist()
         t = (np.arange(0.,len(d),1)/10).tolist()
         del t[-1]
         del d[-1]
-        d = (self.upperEnd/self.lowEnd)*d - self.lowEnd
+        try:
+            d = [self.gain*x+self.offset for x in d]
+        except:
+            tkMessageBox.showwarning("Error","Calibration must be set before "
+                                             " plotting.\n\nSee 'Help' for more information.")
+            return
         plt.plot(t,d)
         plt.ylabel('Force')
         plt.xlabel('Time [s]')
         plt.show()
+
+    def helpBox(self):
+        self.helpMessage = (
+                        "Before plotting, calibration must be set.\n\n"
+                        "The calibrate buttons store 5 seconds of data "
+                        "in a corresponding .cal file.\n\n"
+                        "'Calculate Calibration' "
+                        "averages the calibration data and calculates a gain and "
+                        "offset.\n\n"
+                        "'Clear calibration' sets the gain to 1 and offset to 0. "
+                        "This results in seeing the raw data from the ADC\n\n"
+                        "Previous calibration data can be used "
+                        "by moving the loaded.cal and unloaded.cal calibration files "
+                        "into the current folder and rerunning the calculate command\n\n"
+                        "'Plot Data' will plot the data from the filename in the text box. "
+                        "Data is assumed to be sampled at 10sps (The default frequency "
+                        "of the HX711 ADC).")
+        tkMessageBox.showinfo("Help",self.helpMessage)
 
     # Start calibration thread
     def calibrate(self, mode):
@@ -33,7 +58,7 @@ class Application(Frame):
 
     # Calibration thread
     def _calibrate(self, mode):
-        self.calibrating = 1
+        self.calibrating = 0
         if mode==1:
             modeName = "unloaded"
         if mode==2:
@@ -49,21 +74,26 @@ class Application(Frame):
             f.write(self.dataIn)
             print "Calibrating",modeName,self.calibrating,":",self.dataIn
         
-        f.close() 
+        f.close()
         
-        print 'Opening '+modeName+'.cal'
-        if mode==1:
-            d = np.genfromtxt('unloaded.cal',delimiter=',',dtype=int).tolist()
-            del d[-1]
-            self.lowEnd = np.mean(d)
-            print "Unloaded calibration factor: ",self.lowEnd
-        if mode==2:
-            d = np.genfromtxt('loaded.cal',delimiter=',',dtype=int).tolist()
-            del d[-1]
-            self.upperEnd = np.mean(d)
-            print "Loaded calibration factor: ",self.upperEnd
+    def setCalibrationFactor(self):
+        d = np.genfromtxt('unloaded.cal',delimiter=',',dtype=int).tolist()
+        del d[-1]
+        self.lowEnd = np.mean(d)
+        print "Unloaded calibration factor: ",self.lowEnd
+        d = np.genfromtxt('loaded.cal',delimiter=',',dtype=int).tolist()
+        del d[-1]
+        self.upperEnd = np.mean(d)
+        print "Loaded calibration factor: ",self.upperEnd
+        self.gain = self.upperEnd/self.lowEnd
+        self.offset = self.lowEnd
+        print "Calibration factor: y=",self.gain,"x -",self.offset
 
 
+    def clearCalibration(self):
+        self.gain = 1
+        self.offset = 0
+        print "Calibration factor: y=",self.gain,"x -",self.offset
          
             
     # Start logging thread
@@ -73,63 +103,81 @@ class Application(Frame):
     # Logging thread
     def _start_logging(self):
         self.logging = 1
-        f = open('current.csv','w')
+        self.fName = self.fileName.get()
+        f = open(self.fName,'w')
         f.write('')
         f.close()
         #port = serial.Serial(self.portName)
-        self.fName = self.fileName.get()
 
         while self.logging:
             self.logging += 1
             #self.dataIn = port.readline()
             self.dataIn = str(self.logging)+','
-            f = open('current.csv','a+')
-            f2 = open(self.fName,'a+')
+            f = open(self.fName,'a+')
             f.write(self.dataIn)
-            f2.write(self.dataIn)
             f.close()
-            f2.close()
             print "Data Logging ",self.logging,": ",self.dataIn
             
         print "Data Logging Stopped to:",self.fName
 
     # Create GUI elements
     def createWidgets(self):
+
+        self.fnameL = Label(self)
+        self.fnameL["text"] = "Data log file name (.csv):\n**Will overwrite files**"
+        self.fnameL.grid(row=1,column=1,pady=20)
+        self.fileName = Entry(self)
+        self.fileName.insert(0,"Filename.csv")
+        self.fileName.grid(row=1,column=2,pady=20, columnspan=2)
+
         self.QUIT = Button(self)
         self.QUIT["text"] = "QUIT"
         self.QUIT["command"] =  self.quitApp
-        self.QUIT.grid(row=5,column=2,pady=20)
+        self.QUIT.grid(row=1,column=4,pady=20)
 
         self.start = Button(self)
-        self.start["text"] = "Start"
+        self.start["text"] = "Start\nLogging"
         self.start["fg"]   = "green"
         self.start["command"] = self.start_logging
-        self.start.grid(row=1,column=1,pady=20) 
+        self.start.grid(row=2,column=1,pady=20,padx=20) 
 
         self.stop = Button(self)
-        self.stop["text"] = "Stop"
+        self.stop["text"] = "Stop\nLogging"
         self.stop["fg"]   = "red"
         self.stop["command"] = self.stop_logging
-        self.stop.grid(row=1,column=3,pady=20)
-
-        self.calUnLoaded = Button(self)
-        self.calUnLoaded["text"] = "Calibrate Unloaded"
-        self.calUnLoaded["command"] = lambda: self.calibrate(1)
-        self.calUnLoaded.grid(row=3,column=3,pady=20)
-
-        self.calLoaded = Button(self)
-        self.calLoaded["text"] = "Calibrate Loaded"
-        self.calLoaded["command"] = lambda: self.calibrate(2)
-        self.calLoaded.grid(row=3,column=1,pady=20)
+        self.stop.grid(row=2,column=2,pady=20,padx=20)
 
         self.plot = Button(self)
-        self.plot["text"] = "Plot"
+        self.plot["text"] = "Plot\nData"
+        self.plot["fg"]   = "blue"
         self.plot["command"] = self.plotData
-        self.plot.grid(row=3,column=2,pady=20)
+        self.plot.grid(row=2,column=3,pady=20,padx=20)
 
-        self.fileName = Entry(self)
-        self.fileName.insert(0,"File Name.csv")
-        self.fileName.grid(row=1,column=2,pady=20)
+        self.helpB = Button(self)
+        self.helpB["text"] = "Help"
+        self.helpB["command"] = self.helpBox
+        self.helpB.grid(row=2,column=4,pady=20,padx=20)
+
+        self.calUnLoaded = Button(self)
+        self.calUnLoaded["text"] = "Calibrate\nUnloaded"
+        self.calUnLoaded["command"] = lambda: self.calibrate(1)
+        self.calUnLoaded.grid(row=4,column=1,pady=20,padx=20)
+
+        self.calLoaded = Button(self)
+        self.calLoaded["text"] = "Calibrate\nLoaded"
+        self.calLoaded["command"] = lambda: self.calibrate(2)
+        self.calLoaded.grid(row=4,column=2,pady=20,padx=20)
+
+        self.calcCal = Button(self)
+        self.calcCal["text"] = "Calculate\nCalibration"
+        self.calcCal["command"] = self.setCalibrationFactor
+        self.calcCal.grid(row=4,column=3,pady=20,padx=20)
+
+        self.clearCal = Button(self)
+        self.clearCal["text"] = "Clear\nCalibration"
+        self.clearCal["command"] = self.clearCalibration
+        self.clearCal.grid(row=4,column=4,pady=20,padx=20)
+
 
     def __init__(self, master=None):
         Frame.__init__(self, master)
@@ -140,7 +188,7 @@ class Application(Frame):
 root = Tk()
 app = Application(master=root)
 app.master.title("Load-Cell Datalogger")
-app.master.minsize(450,250)
+app.master.minsize(600,250)
 app.mainloop()
 root.destroy()
 
