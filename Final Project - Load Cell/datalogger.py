@@ -8,7 +8,8 @@ import numpy as np
 
 class Application(Frame):
 
-    portName = "/dev/ttyUSB0"
+    portName = 'COM26'
+    maxKg = 5
     
     def quitApp(self):
         self.logging = 0;
@@ -19,18 +20,19 @@ class Application(Frame):
         self.logging = 0
 
     def plotData(self):
-        d = np.genfromtxt(self.fileName.get(),delimiter=',',dtype=int).tolist()
+        d = np.genfromtxt(self.fileName.get(),delimiter="\n", autostrip=True).tolist()
         t = (np.arange(0.,len(d),1)/10).tolist()
         del t[-1]
         del d[-1]
         try:
-            d = [self.gain*x+self.offset for x in d]
+            d = [self.gain*x-self.offset for x in d]
         except:
             tkMessageBox.showwarning("Error","Calibration must be set before "
                                              " plotting.\n\nSee 'Help' for more information.")
             return
+        d = [9.81*x for x in d]
         plt.plot(t,d)
-        plt.ylabel('Force')
+        plt.ylabel('Force [N]')
         plt.xlabel('Time [s]')
         plt.show()
 
@@ -41,12 +43,9 @@ class Application(Frame):
                         "in a corresponding .cal file.\n\n"
                         "'Calculate Calibration' "
                         "averages the calibration data and calculates a gain and "
-                        "offset.\n\n"
+                        "offset to convert raw data to Newtons of force.\n\n"
                         "'Clear calibration' sets the gain to 1 and offset to 0. "
-                        "This results in seeing the raw data from the ADC\n\n"
-                        "Previous calibration data can be used "
-                        "by moving the loaded.cal and unloaded.cal calibration files "
-                        "into the current folder and rerunning the calculate command\n\n"
+                        "This results in seeing the raw data from the ADC.\n\n"
                         "'Plot Data' will plot the data from the filename in the text box. "
                         "Data is assumed to be sampled at 10sps (The default frequency "
                         "of the HX711 ADC).")
@@ -65,19 +64,19 @@ class Application(Frame):
             modeName = "loaded"
         f = open(modeName+'.cal','w')
         f.write('')
-        #port = serial.Serial(self.portName)
+        port = serial.Serial(self.portName)
 
         while self.calibrating<50:
             self.calibrating += 1
-            #self.dataIn = port.readline()
-            self.dataIn = str(self.calibrating)+','
+            self.dataIn = port.readline()
             f.write(self.dataIn)
-            print "Calibrating",modeName,self.calibrating,":",self.dataIn
+            print "Calibrating",modeName,self.calibrating,":",str(self.dataIn).rstrip('\n')
         
         f.close()
+        print modeName,"Calibration Complete"
         
     def setCalibrationFactor(self):
-        d = np.genfromtxt('unloaded.cal',delimiter=',',dtype=int).tolist()
+        d = np.genfromtxt('unloaded.cal',delimiter='\n',dtype=int).tolist()
         del d[-1]
         self.lowEnd = np.mean(d)
         print "Unloaded calibration factor: ",self.lowEnd
@@ -85,9 +84,9 @@ class Application(Frame):
         del d[-1]
         self.upperEnd = np.mean(d)
         print "Loaded calibration factor: ",self.upperEnd
-        self.gain = self.upperEnd/self.lowEnd
-        self.offset = self.lowEnd
-        print "Calibration factor: y=",self.gain,"x -",self.offset
+        self.gain = self.maxKg/(self.upperEnd-self.lowEnd)
+        self.offset = self.gain*self.lowEnd
+        print "Calibration function: y =",self.gain,"x - (",self.offset,")"
 
 
     def clearCalibration(self):
@@ -103,20 +102,21 @@ class Application(Frame):
     # Logging thread
     def _start_logging(self):
         self.logging = 1
+        self.loggingCount = 0
         self.fName = self.fileName.get()
         f = open(self.fName,'w')
         f.write('')
         f.close()
-        #port = serial.Serial(self.portName)
+        port = serial.Serial(self.portName)
 
         while self.logging:
-            self.logging += 1
-            #self.dataIn = port.readline()
-            self.dataIn = str(self.logging)+','
+            self.loggingCount += 1
+            self.dataIn = port.readline()
             f = open(self.fName,'a+')
             f.write(self.dataIn)
             f.close()
-            print "Data Logging ",self.logging,": ",self.dataIn
+            logMessage = "("+str(self.loggingCount/10.)+"s) - Raw: "+str(self.dataIn).rstrip('\n')
+            print logMessage
             
         print "Data Logging Stopped to:",self.fName
 
