@@ -14,27 +14,36 @@ class Application(Frame):
     def quitApp(self):
         self.logging = 0;
         self.quit()
-        self.quit()
+        
 
     def stop_logging(self):
         self.logging = 0
 
     def plotData(self):
-        d = np.genfromtxt(self.fileName.get(),delimiter="\n", autostrip=True).tolist()
+        try:
+            d = np.genfromtxt(self.fileName.get(),delimiter="\n", autostrip=True).tolist()
+        except:
+            tkMessageBox.showwarning("Plotting Error",self.fileName.get()+" does not exist or is being used by another program")
+            return
+        
         t = (np.arange(0.,len(d),1)/10).tolist()
-        del t[-1]
-        del d[-1]
+        
         try:
             d = [self.gain*x-self.offset for x in d]
         except:
-            tkMessageBox.showwarning("Error","Calibration must be set before "
+            tkMessageBox.showwarning("Calibration Error","Calibration must be set before "
                                              " plotting.\n\nSee 'Help' for more information.")
             return
-        d = [9.81*x for x in d]
-        plt.plot(t,d)
-        plt.ylabel('Force [N]')
-        plt.xlabel('Time [s]')
-        plt.show()
+        try:
+            del t[-1]
+            del d[-1]
+            d = [9.81*x for x in d] # Kd to Newtons
+            plt.plot(t,d)
+            plt.ylabel('Force [N]')
+            plt.xlabel('Time [s]')
+            plt.show()
+        except:
+            tkMessageBox.showwarning("Plotting Error","Invalid Data\n\nSee console for more information.")
 
     def helpBox(self):
         self.helpMessage = (
@@ -53,6 +62,11 @@ class Application(Frame):
 
     # Start calibration thread
     def calibrate(self, mode):
+        try:
+            self.port = serial.Serial(self.portName)
+        except:
+            tkMessageBox.showwarning("Serial Error","Could not open serial port:\n\n"+self.portName)
+            return
         threading.Thread(target=self._calibrate, args=(mode,)).start()
 
     # Calibration thread
@@ -64,11 +78,10 @@ class Application(Frame):
             modeName = "loaded"
         f = open(modeName+'.cal','w')
         f.write('')
-        port = serial.Serial(self.portName)
 
         while self.calibrating<50:
             self.calibrating += 1
-            self.dataIn = port.readline()
+            self.dataIn = self.port.readline()
             f.write(self.dataIn)
             print "Calibrating",modeName,self.calibrating,":",str(self.dataIn).rstrip('\n')
         
@@ -76,14 +89,36 @@ class Application(Frame):
         print modeName,"Calibration Complete"
         
     def setCalibrationFactor(self):
-        d = np.genfromtxt('unloaded.cal',delimiter='\n',dtype=int).tolist()
-        del d[-1]
-        self.lowEnd = np.mean(d)
-        print "Unloaded calibration factor: ",self.lowEnd
-        d = np.genfromtxt('loaded.cal',delimiter=',',dtype=int).tolist()
-        del d[-1]
-        self.upperEnd = np.mean(d)
-        print "Loaded calibration factor: ",self.upperEnd
+        # Unloaded Calibration
+        try:
+            d = np.genfromtxt('unloaded.cal',delimiter='\n',dtype=int).tolist()
+        except:
+            tkMessageBox.showwarning("Calibration Error","unloaded.cal does not exist or is being used by another program.\n\n"
+                                                         "Try running 'Calibrate Unloaded'.")
+            return
+        try:
+            del d[-1]
+            self.lowEnd = np.mean(d)
+            print "Unloaded calibration factor: ",self.lowEnd
+        except:
+            tkMessageBox.showwarning("Calibration Error","Invalid calibration data file.\n\n"
+                                                         "Try running 'Calibrate Unloaded'.")
+            return
+        # Loaded Calibration
+        try:
+            d = np.genfromtxt('loaded.cal',delimiter=',',dtype=int).tolist()
+        except:
+            tkMessageBox.showwarning("Calibration Error","unloaded.cal does not exist or is being used by another program\n\n"
+                                                         "Try running 'Calibrate Loaded'.")
+            return
+        try:
+            del d[-1]
+            self.upperEnd = np.mean(d)
+            print "Loaded calibration factor: ",self.upperEnd
+        except:
+            tkMessageBox.showwarning("Calibration Error","Invalid calibration data file.\n\n"
+                                                         "Try running 'Calibrate Loaded'.")
+            return
         self.gain = self.maxKg/(self.upperEnd-self.lowEnd)
         self.offset = self.gain*self.lowEnd
         print "Calibration function: y =",self.gain,"x - (",self.offset,")"
@@ -97,21 +132,29 @@ class Application(Frame):
             
     # Start logging thread
     def start_logging(self):
+        self.fName = self.fileName.get()
+        try:
+            f = open(self.fName,'w')
+            f.write('')
+            f.close()
+        except:
+            tkMessageBox.showwarning("File Error","Could not open file:\n\n"+self.fName)
+            return
+        try:
+            self.port = serial.Serial(self.portName)
+        except:
+            tkMessageBox.showwarning("Serial Error","Could not open serial port:\n\n"+self.portName)
+            return
         threading.Thread(target=self._start_logging).start()
 
     # Logging thread
     def _start_logging(self):
         self.logging = 1
         self.loggingCount = 0
-        self.fName = self.fileName.get()
-        f = open(self.fName,'w')
-        f.write('')
-        f.close()
-        port = serial.Serial(self.portName)
 
         while self.logging:
             self.loggingCount += 1
-            self.dataIn = port.readline()
+            self.dataIn = self.port.readline()
             f = open(self.fName,'a+')
             f.write(self.dataIn)
             f.close()
@@ -184,15 +227,6 @@ class Application(Frame):
         self.pack()
         self.createWidgets()
         
-
-root = Tk()
-app = Application(master=root)
-app.master.title("Load-Cell Datalogger")
-app.master.minsize(600,250)
-app.mainloop()
-root.destroy()
-
-print "datalogger.py quit sucessfully"
 
 root = Tk()
 app = Application(master=root)
