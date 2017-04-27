@@ -1,16 +1,25 @@
+import time
 import threading
+import sys
+import os
 from Tkinter import *
 import tkMessageBox
-import serial
-import sys
-import matplotlib.pyplot as plt
-import numpy as np
+try:
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import serial
+except:
+    print 'Required Packages not found.'
+    print 'Please run: install.cmd'
+    print 'Exiting in:',
+    for i in range(5,0,-1):
+        print str(i),
+        time.sleep(1)
+    exit(1)
 
 class Application(Frame):
 
-    portName = 'COM26'
-    maxKg = 5
-    
+   
     def quitApp(self):
         self.logging = 0;
         self.quit()
@@ -21,7 +30,7 @@ class Application(Frame):
 
     def plotData(self):
         try:
-            d = np.genfromtxt(self.fileName.get(),delimiter="\n", autostrip=True).tolist()
+            d = np.genfromtxt("Logs\\"+self.fileName.get(),delimiter="\n", autostrip=True).tolist()
         except:
             tkMessageBox.showwarning("Plotting Error",self.fileName.get()+" does not exist or is being used by another program")
             return
@@ -37,7 +46,7 @@ class Application(Frame):
         try:
             del t[-1]
             del d[-1]
-            d = [9.81*x for x in d] # Kd to Newtons
+            d = [9.81*x for x in d] # Kg to Newtons
             plt.plot(t,d)
             plt.ylabel('Force [N]')
             plt.xlabel('Time [s]')
@@ -53,98 +62,80 @@ class Application(Frame):
                         "'Calculate Calibration' "
                         "averages the calibration data and calculates a gain and "
                         "offset to convert raw data to Newtons of force.\n\n"
-                        "'Clear calibration' sets the gain to 1 and offset to 0. "
-                        "This results in seeing the raw data from the ADC.\n\n"
+                        "After a 'Clear calibration' plotting will display the raw data.\n\n"
                         "'Plot Data' will plot the data from the filename in the text box. "
                         "Data is assumed to be sampled at 10sps (The default frequency "
-                        "of the HX711 ADC).")
+                        "of the A/D).")
         tkMessageBox.showinfo("Help",self.helpMessage)
 
-    # Start calibration thread
-    def calibrate(self, mode):
+    # Start calibration
+    def calibrate(self):
         try:
-            self.port = serial.Serial(self.portName)
+            self.port = serial.Serial(self.comPort.get())
         except:
-            tkMessageBox.showwarning("Serial Error","Could not open serial port:\n\n"+self.portName)
+            tkMessageBox.showwarning("Serial Error","Could not open serial port:\n\n"+self.comPort.get())
             return
-        threading.Thread(target=self._calibrate, args=(mode,)).start()
-
-    # Calibration thread
-    def _calibrate(self, mode):
+        tkMessageBox.showinfo("Calibration Step 1","Make sure load cell is unloaded.")
+        self.statusLabel["text"] = "Calibrating Unloaded..."
+    
         self.calibrating = 0
-        if mode==1:
-            modeName = "unloaded"
-        if mode==2:
-            modeName = "loaded"
-        f = open(modeName+'.cal','w')
-        f.write('')
-
-        while self.calibrating<50:
+        self.lowEnd = 0
+        while self.calibrating<5:
             self.calibrating += 1
-            self.dataIn = self.port.readline()
-            f.write(self.dataIn)
-            print "Calibrating",modeName,self.calibrating,":",str(self.dataIn).rstrip('\n')
+            temp = float(self.port.readline())
+            self.lowEnd += temp/50.
+            print "Calibrating Unloaded",self.calibrating,":",str(temp)
+            self.statusLabel["text"] = "Calibrating Unloaded: "+str(self.calibrating*2)+"%"
+
+        tkMessageBox.showinfo("Calibration Step 2","Make sure load cell is loaded with "+self.maxKg.get()+"Kg.")
         
-        f.close()
-        print modeName,"Calibration Complete"
+        self.calibrating = 0
+        self.upperEnd = 0
+        while self.calibrating<5:
+            self.calibrating += 1
+            temp = float(self.port.readline())
+            self.upperEnd += temp/50.
+            print "Calibrating Loaded",self.calibrating,":",str(temp)
+            self.statusLabel["text"] = "Calibrating Loaded: "+str(self.calibrating*2)+"%"
         
-    def setCalibrationFactor(self):
-        # Unloaded Calibration
-        try:
-            d = np.genfromtxt('unloaded.cal',delimiter='\n',dtype=int).tolist()
-        except:
-            tkMessageBox.showwarning("Calibration Error","unloaded.cal does not exist or is being used by another program.\n\n"
-                                                         "Try running 'Calibrate Unloaded'.")
-            return
-        try:
-            del d[-1]
-            self.lowEnd = np.mean(d)
-            print "Unloaded calibration factor: ",self.lowEnd
-        except:
-            tkMessageBox.showwarning("Calibration Error","Invalid calibration data file.\n\n"
-                                                         "Try running 'Calibrate Unloaded'.")
-            return
-        # Loaded Calibration
-        try:
-            d = np.genfromtxt('loaded.cal',delimiter=',',dtype=int).tolist()
-        except:
-            tkMessageBox.showwarning("Calibration Error","unloaded.cal does not exist or is being used by another program\n\n"
-                                                         "Try running 'Calibrate Loaded'.")
-            return
-        try:
-            del d[-1]
-            self.upperEnd = np.mean(d)
-            print "Loaded calibration factor: ",self.upperEnd
-        except:
-            tkMessageBox.showwarning("Calibration Error","Invalid calibration data file.\n\n"
-                                                         "Try running 'Calibrate Loaded'.")
-            return
-        self.gain = self.maxKg/(self.upperEnd-self.lowEnd)
+        self.enableButtons()
+        self.statusLabel["text"] = "Calibration Complete"
+        tkMessageBox.showinfo("Calibration","Calibration Complete")
+        
+        self.gain = float(self.maxKg.get())/(self.upperEnd-self.lowEnd)
         self.offset = self.gain*self.lowEnd
-        print "Calibration function: y =",self.gain,"x - (",self.offset,")"
+        calStr = "Calibration function: Force=("+str(self.gain)+")*input-("+str(self.offset)+")"
+        self.statusLabel["text"] = calStr
+        self.port.close()
+        print calStr
 
 
     def clearCalibration(self):
         self.gain = 1
         self.offset = 0
         print "Calibration factor: y=",self.gain,"x -",self.offset
+        self.statusLabel["text"] = "Calibration Cleared. Recorded output will be raw data."
+        self.enableButtons()
          
             
     # Start logging thread
     def start_logging(self):
-        self.fName = self.fileName.get()
+        if not os.path.exists('Logs\\'):
+            os.makedirs('Logs\\')
         try:
+            self.port = serial.Serial(self.comPort.get())
+        except:
+            tkMessageBox.showwarning("Serial Error","Could not open serial port:\n\n"+self.comPort.get())
+            return
+        try:
+            self.fName = "Logs\\"+self.fileName.get()
             f = open(self.fName,'w')
             f.write('')
             f.close()
         except:
             tkMessageBox.showwarning("File Error","Could not open file:\n\n"+self.fName)
             return
-        try:
-            self.port = serial.Serial(self.portName)
-        except:
-            tkMessageBox.showwarning("Serial Error","Could not open serial port:\n\n"+self.portName)
-            return
+        self.statusLabel["text"] = "Logging..."
         threading.Thread(target=self._start_logging).start()
 
     # Logging thread
@@ -161,10 +152,35 @@ class Application(Frame):
             logMessage = "("+str(self.loggingCount/10.)+"s) - Raw: "+str(self.dataIn).rstrip('\n')
             print logMessage
             
-        print "Data Logging Stopped to:",self.fName
+        self.statusLabel["text"] = "Data Logging Complete. Raw data saved to:",self.fName
+
+    def enableButtons(self):
+        self.start['state'] = 'normal'
+        self.stop['state'] = 'normal'
+        self.plot['state'] = 'normal'
+        self.calUnLoaded['state'] = 'normal'
+
+    def disableButtons(self):
+        self.start['state'] = 'disabled'
+        self.stop['state'] = 'disabled'
+        self.plot['state'] = 'disabled'
+        self.calUnLoaded['state'] = 'disabled'
 
     # Create GUI elements
     def createWidgets(self):
+
+        self.comLabel = Label(self)
+        self.comLabel["text"] = "Serial port:"
+        self.comLabel.grid(row=0,column=1,pady=20)
+        self.comLabel["anchor"] = "e"
+        self.comPort = Entry(self)
+        self.comPort.insert(0,"COM1")
+        self.comPort.grid(row=0,column=2,pady=20,columnspan=2)
+        
+        self.QUIT = Button(self)
+        self.QUIT["text"] = "QUIT"
+        self.QUIT["command"] =  self.quitApp
+        self.QUIT.grid(row=0,column=4,pady=20)
 
         self.fnameL = Label(self)
         self.fnameL["text"] = "Data log file name (.csv):\n**Will overwrite files**"
@@ -172,54 +188,56 @@ class Application(Frame):
         self.fileName = Entry(self)
         self.fileName.insert(0,"Filename.csv")
         self.fileName.grid(row=1,column=2,pady=20, columnspan=2)
+        
+        self.helpB = Button(self)
+        self.helpB["text"] = "Help"
+        self.helpB["command"] = self.helpBox
+        self.helpB.grid(row=1,column=4,pady=20,padx=20)
 
-        self.QUIT = Button(self)
-        self.QUIT["text"] = "QUIT"
-        self.QUIT["command"] =  self.quitApp
-        self.QUIT.grid(row=1,column=4,pady=20)
+        self.maxLabel = Label(self)
+        self.maxLabel["text"] = "Calibration Mass [Kg]:"
+        self.maxLabel.grid(row=2,column=1,pady=20)
+        self.maxLabel["anchor"] = "e"
+        self.maxKg = Entry(self)
+        self.maxKg.insert(0,"5")
+        self.maxKg.grid(row=2,column=2,pady=20, columnspan=2)
+        
+        self.calUnLoaded = Button(self)
+        self.calUnLoaded["text"] = "Calibrate"
+        self.calUnLoaded["command"] = self.calibrate
+        self.calUnLoaded.grid(row=2,column=4,pady=20,padx=20)
 
         self.start = Button(self)
         self.start["text"] = "Start\nLogging"
         self.start["fg"]   = "green"
         self.start["command"] = self.start_logging
-        self.start.grid(row=2,column=1,pady=20,padx=20) 
+        self.start.grid(row=3,column=1,pady=20,padx=20) 
 
         self.stop = Button(self)
         self.stop["text"] = "Stop\nLogging"
         self.stop["fg"]   = "red"
         self.stop["command"] = self.stop_logging
-        self.stop.grid(row=2,column=2,pady=20,padx=20)
+        self.stop.grid(row=3,column=2,pady=20,padx=20)
 
         self.plot = Button(self)
         self.plot["text"] = "Plot\nData"
         self.plot["fg"]   = "blue"
         self.plot["command"] = self.plotData
-        self.plot.grid(row=2,column=3,pady=20,padx=20)
-
-        self.helpB = Button(self)
-        self.helpB["text"] = "Help"
-        self.helpB["command"] = self.helpBox
-        self.helpB.grid(row=2,column=4,pady=20,padx=20)
-
-        self.calUnLoaded = Button(self)
-        self.calUnLoaded["text"] = "Calibrate\nUnloaded"
-        self.calUnLoaded["command"] = lambda: self.calibrate(1)
-        self.calUnLoaded.grid(row=4,column=1,pady=20,padx=20)
-
-        self.calLoaded = Button(self)
-        self.calLoaded["text"] = "Calibrate\nLoaded"
-        self.calLoaded["command"] = lambda: self.calibrate(2)
-        self.calLoaded.grid(row=4,column=2,pady=20,padx=20)
-
-        self.calcCal = Button(self)
-        self.calcCal["text"] = "Calculate\nCalibration"
-        self.calcCal["command"] = self.setCalibrationFactor
-        self.calcCal.grid(row=4,column=3,pady=20,padx=20)
+        self.plot.grid(row=3,column=3,pady=20,padx=20)
 
         self.clearCal = Button(self)
         self.clearCal["text"] = "Clear\nCalibration"
         self.clearCal["command"] = self.clearCalibration
-        self.clearCal.grid(row=4,column=4,pady=20,padx=20)
+        self.clearCal.grid(row=3,column=4,pady=20,padx=20)
+
+        self.statusLabel = Label(self)
+        self.statusLabel["text"] = "Calibration is required before data acquisition."
+        self.statusLabel["anchor"] = "w"
+        self.statusLabel.grid(row=4,column=1,pady=20,columnspan=4)
+
+        self.start['state'] = 'disabled'
+        self.stop['state'] = 'disabled'
+        self.plot['state'] = 'disabled'
 
 
     def __init__(self, master=None):
@@ -227,6 +245,7 @@ class Application(Frame):
         self.pack()
         self.createWidgets()
         
+    
 
 root = Tk()
 app = Application(master=root)
@@ -234,6 +253,6 @@ app.master.title("Load-Cell Datalogger")
 app.master.minsize(600,250)
 app.mainloop()
 root.destroy()
-
 print "datalogger.py quit sucessfully"
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+
+
