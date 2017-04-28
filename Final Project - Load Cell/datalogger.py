@@ -19,12 +19,6 @@ except:
 
 class Application(Frame):
 
-   
-    def quitApp(self):
-        self.logging = 0;
-        self.quit()
-        
-
     def stop_logging(self):
         self.logging = 0
 
@@ -38,15 +32,8 @@ class Application(Frame):
         t = (np.arange(0.,len(d),1)/10).tolist()
         
         try:
-            d = [self.gain*x-self.offset for x in d]
-        except:
-            tkMessageBox.showwarning("Calibration Error","Calibration must be set before "
-                                             " plotting.\n\nSee 'Help' for more information.")
-            return
-        try:
             del t[-1]
             del d[-1]
-            d = [9.81*x for x in d] # Kg to Newtons
             plt.plot(t,d)
             plt.ylabel('Force [N]')
             plt.xlabel('Time [s]')
@@ -54,19 +41,6 @@ class Application(Frame):
         except:
             tkMessageBox.showwarning("Plotting Error","Invalid Data\n\nSee console for more information.")
 
-    def helpBox(self):
-        self.helpMessage = (
-                        "Before plotting, calibration must be set.\n\n"
-                        "The calibrate buttons store 5 seconds of data "
-                        "in a corresponding .cal file.\n\n"
-                        "'Calculate Calibration' "
-                        "averages the calibration data and calculates a gain and "
-                        "offset to convert raw data to Newtons of force.\n\n"
-                        "After a 'Clear calibration' plotting will display the raw data.\n\n"
-                        "'Plot Data' will plot the data from the filename in the text box. "
-                        "Data is assumed to be sampled at 10sps (The default frequency "
-                        "of the A/D).")
-        tkMessageBox.showinfo("Help",self.helpMessage)
 
     # Start calibration
     def calibrate(self):
@@ -102,7 +76,7 @@ class Application(Frame):
         self.statusLabel["text"] = "Calibration Complete"
         tkMessageBox.showinfo("Calibration","Calibration Complete")
         
-        self.gain = float(self.maxKg.get())/(self.upperEnd-self.lowEnd)
+        self.gain = 9.81*float(self.maxKg.get())/(self.upperEnd-self.lowEnd)
         self.offset = self.gain*self.lowEnd
         calStr = "Calibration function: Force=("+str(self.gain)+")*input-("+str(self.offset)+")"
         self.statusLabel["text"] = calStr
@@ -113,8 +87,7 @@ class Application(Frame):
     def clearCalibration(self):
         self.gain = 1
         self.offset = 0
-        print "Calibration factor: y=",self.gain,"x -",self.offset
-        self.statusLabel["text"] = "Calibration Cleared. Recorded output will be raw data."
+        self.statusLabel["text"] = "Calibration Cleared. Recorded data will be raw input."
         self.enableButtons()
          
             
@@ -176,23 +149,13 @@ class Application(Frame):
         self.comPort = Entry(self)
         self.comPort.insert(0,"COM1")
         self.comPort.grid(row=0,column=2,pady=20,columnspan=2)
-        
-        self.QUIT = Button(self)
-        self.QUIT["text"] = "QUIT"
-        self.QUIT["command"] =  self.quitApp
-        self.QUIT.grid(row=0,column=4,pady=20)
 
         self.fnameL = Label(self)
-        self.fnameL["text"] = "Data log file name (.csv):\n**Will overwrite files**"
+        self.fnameL["text"] = "Data log filename (.csv):\n**Will overwrite files**"
         self.fnameL.grid(row=1,column=1,pady=20)
         self.fileName = Entry(self)
         self.fileName.insert(0,"Filename.csv")
         self.fileName.grid(row=1,column=2,pady=20, columnspan=2)
-        
-        self.helpB = Button(self)
-        self.helpB["text"] = "Help"
-        self.helpB["command"] = self.helpBox
-        self.helpB.grid(row=1,column=4,pady=20,padx=20)
 
         self.maxLabel = Label(self)
         self.maxLabel["text"] = "Calibration Mass [Kg]:"
@@ -231,7 +194,7 @@ class Application(Frame):
         self.clearCal.grid(row=3,column=4,pady=20,padx=20)
 
         self.statusLabel = Label(self)
-        self.statusLabel["text"] = "Calibration is required before data acquisition."
+        self.statusLabel["text"] = "Calibration is required before data acquisition.\n'Clear Calibration' to run without calibrating and record raw data."
         self.statusLabel["anchor"] = "w"
         self.statusLabel.grid(row=4,column=1,pady=20,columnspan=4)
 
@@ -245,14 +208,21 @@ class Application(Frame):
         self.pack()
         self.createWidgets()
         
-    
+
+
 
 root = Tk()
+def on_closing():
+    if tkMessageBox.askokcancel("Quit", "Are you sure you want to quit?\nAll calibration data and unsaved plots will be lost."):
+        plt.close()
+        root.destroy()
+
+root.protocol("WM_DELETE_WINDOW", on_closing)
 app = Application(master=root)
-app.master.title("Load-Cell Datalogger")
+app.master.title("Rocket Engine Curve and Impulse DAQ - v1.0")
 app.master.minsize(600,250)
 app.mainloop()
-root.destroy()
+
 print "datalogger.py quit sucessfully"
 
 
