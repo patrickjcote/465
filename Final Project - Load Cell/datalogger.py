@@ -45,34 +45,22 @@ class Application(Frame):
 
     # Start calibration
     def calibrate(self):
+        print self.comPort.get()
         try:
             self.port = serial.Serial(self.comPort.get())
         except:
             tkMessageBox.showwarning("Serial Error","Could not open serial port:\n\n"+self.comPort.get())
             return
-        tkMessageBox.showinfo("Calibration Step 1","Make sure load cell is unloaded.")
-        self.statusLabel["text"] = "Calibrating Unloaded..."
-    
-        self.calibrating = 0
-        self.lowEnd = 0
-        while self.calibrating<5:
-            self.calibrating += 1
-            temp = float(self.port.readline())
-            self.lowEnd += temp/50.
-            print "Calibrating Unloaded",self.calibrating,":",str(temp)
-            self.statusLabel["text"] = "Calibrating Unloaded: "+str(self.calibrating*2)+"%"
+        if tkMessageBox.askokcancel("Calibration Step 1","Make sure load cell is unloaded"):
+            self.calibrateUnloaded()
+        else:
+            return
+        
+        if tkMessageBox.askokcancel("Calibration Step 2","Make sure load cell is loaded with "+self.maxKg.get()+"Kg."):
+            self.calibrateLoaded()
+        else:
+            return
 
-        tkMessageBox.showinfo("Calibration Step 2","Make sure load cell is loaded with "+self.maxKg.get()+"Kg.")
-        
-        self.calibrating = 0
-        self.upperEnd = 0
-        while self.calibrating<5:
-            self.calibrating += 1
-            temp = float(self.port.readline())
-            self.upperEnd += temp/50.
-            print "Calibrating Loaded",self.calibrating,":",str(temp)
-            self.statusLabel["text"] = "Calibrating Loaded: "+str(self.calibrating*2)+"%"
-        
         self.enableButtons()
         self.statusLabel["text"] = "Calibration Complete"
         tkMessageBox.showinfo("Calibration","Calibration Complete")
@@ -83,6 +71,28 @@ class Application(Frame):
         self.statusLabel["text"] = calStr
         self.port.close()
         print calStr
+
+    def calibrateUnloaded(self):
+        self.statusLabel["text"] = "Calibrating Unloaded..."
+        self.calibrating = 0
+        self.lowEnd = 0
+        while self.calibrating<50:
+            self.calibrating += 1
+            temp = float(self.port.readline())
+            self.lowEnd += temp/50.
+            print "Calibrating Unloaded",self.calibrating,":",str(temp)
+            self.statusLabel["text"] = "Calibrating Unloaded: "+str(self.calibrating*2)+"%"
+
+    def calibrateLoaded(self):
+        self.calibrating = 0
+        self.upperEnd = 0
+        while self.calibrating<50:
+            self.calibrating += 1
+            temp = float(self.port.readline())
+            self.upperEnd += temp/50.
+            print "Calibrating Loaded",self.calibrating,":",str(temp)
+            self.statusLabel["text"] = "Calibrating Loaded: "+str(self.calibrating*2)+"%"
+        
 
 
     def clearCalibration(self):
