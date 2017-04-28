@@ -24,7 +24,7 @@ class Application(Frame):
 
     def plotData(self):
         try:
-            d = np.genfromtxt("Logs\\"+self.fileName.get(),delimiter="\n", autostrip=True).tolist()
+            d = np.genfromtxt(self.fileName.get(),delimiter="\n", autostrip=True).tolist()
         except:
             tkMessageBox.showwarning("Plotting Error",self.fileName.get()+" does not exist or is being used by another program")
             return
@@ -37,6 +37,7 @@ class Application(Frame):
             plt.plot(t,d)
             plt.ylabel('Force [N]')
             plt.xlabel('Time [s]')
+            plt.title('Calculated impulse = '+str(np.sum(d))+'Ns')
             plt.show()
         except:
             tkMessageBox.showwarning("Plotting Error","Invalid Data\n\nSee console for more information.")
@@ -93,15 +94,13 @@ class Application(Frame):
             
     # Start logging thread
     def start_logging(self):
-        if not os.path.exists('Logs\\'):
-            os.makedirs('Logs\\')
         try:
             self.port = serial.Serial(self.comPort.get())
         except:
             tkMessageBox.showwarning("Serial Error","Could not open serial port:\n\n"+self.comPort.get())
             return
         try:
-            self.fName = "Logs\\"+self.fileName.get()
+            self.fName = self.fileName.get()
             f = open(self.fName,'w')
             f.write('')
             f.close()
@@ -148,14 +147,20 @@ class Application(Frame):
         self.comLabel["anchor"] = "e"
         self.comPort = Entry(self)
         self.comPort.insert(0,"COM1")
-        self.comPort.grid(row=0,column=2,pady=20,columnspan=2)
+        self.comPort.grid(row=0,column=2,pady=20,columnspan=2, padx=10)
 
         self.fnameL = Label(self)
         self.fnameL["text"] = "Data log filename (.csv):\n**Will overwrite files**"
         self.fnameL.grid(row=1,column=1,pady=20)
         self.fileName = Entry(self)
-        self.fileName.insert(0,"Filename.csv")
-        self.fileName.grid(row=1,column=2,pady=20, columnspan=2)
+        self.fileName.insert(0,"log.csv")
+        self.fileName.grid(row=1,column=2,pady=20, columnspan=2, padx=10)
+
+        self.plot = Button(self)
+        self.plot["text"] = "Plot\nData"
+        self.plot["fg"]   = "blue"
+        self.plot["command"] = self.plotData
+        self.plot.grid(row=1,column=4,pady=20,padx=20)
 
         self.maxLabel = Label(self)
         self.maxLabel["text"] = "Calibration Mass [Kg]:"
@@ -182,12 +187,6 @@ class Application(Frame):
         self.stop["command"] = self.stop_logging
         self.stop.grid(row=3,column=2,pady=20,padx=20)
 
-        self.plot = Button(self)
-        self.plot["text"] = "Plot\nData"
-        self.plot["fg"]   = "blue"
-        self.plot["command"] = self.plotData
-        self.plot.grid(row=3,column=3,pady=20,padx=20)
-
         self.clearCal = Button(self)
         self.clearCal["text"] = "Clear\nCalibration"
         self.clearCal["command"] = self.clearCalibration
@@ -200,7 +199,6 @@ class Application(Frame):
 
         self.start['state'] = 'disabled'
         self.stop['state'] = 'disabled'
-        self.plot['state'] = 'disabled'
 
 
     def __init__(self, master=None):
@@ -213,7 +211,7 @@ class Application(Frame):
 
 root = Tk()
 def on_closing():
-    if tkMessageBox.askokcancel("Quit", "Are you sure you want to quit?\nAll calibration data and unsaved plots will be lost."):
+    if tkMessageBox.askokcancel("Quit", "Are you sure you want to quit?\nAny calibration data and unsaved plots will be lost."):
         plt.close()
         root.destroy()
 
