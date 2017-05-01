@@ -227,7 +227,7 @@ def on_closing():
 
 root.protocol("WM_DELETE_WINDOW", on_closing)
 app = Application(master=root)
-app.master.title("Rocket Engine Curve and Impulse DAQ - v1.0")
+app.master.title("RocketCurve - Thrust and Impulse DAQ - v1.0")
 app.master.minsize(600,250)
 app.mainloop()
 
