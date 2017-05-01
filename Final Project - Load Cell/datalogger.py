@@ -42,12 +42,20 @@ class Application(Frame):
         except:
             tkMessageBox.showwarning("Plotting Error","Invalid Data\n\nSee console for more information.")
 
+    def testCom(self):
+        try:
+            self.port = serial.Serial(self.comPort.get())
+            self.port.close()
+            tkMessageBox.showinfo("Serial Port Connected","Sucessfully opened serial port:\n\n"+self.comPort.get())
+        except:
+            tkMessageBox.showwarning("Serial Error","Could not open serial port:\n\n"+self.comPort.get())
+            return
 
     # Start calibration
     def calibrate(self):
-        print self.comPort.get()
         try:
             self.port = serial.Serial(self.comPort.get())
+            self.port.close()
         except:
             tkMessageBox.showwarning("Serial Error","Could not open serial port:\n\n"+self.comPort.get())
             return
@@ -69,10 +77,14 @@ class Application(Frame):
         self.offset = self.gain*self.lowEnd
         calStr = "Calibration function: Force=("+str(self.gain)+")*input-("+str(self.offset)+")"
         self.statusLabel["text"] = calStr
-        self.port.close()
         print calStr
 
     def calibrateUnloaded(self):
+        try:
+            self.port = serial.Serial(self.comPort.get())
+        except:
+            tkMessageBox.showwarning("Serial Error","Could not open serial port:\n\n"+self.comPort.get())
+            return
         self.statusLabel["text"] = "Calibrating Unloaded..."
         self.calibrating = 0
         self.lowEnd = 0
@@ -82,8 +94,14 @@ class Application(Frame):
             self.lowEnd += temp/50.
             print "Calibrating Unloaded",self.calibrating,":",str(temp)
             self.statusLabel["text"] = "Calibrating Unloaded: "+str(self.calibrating*2)+"%"
-
+        self.port.close()
+        
     def calibrateLoaded(self):
+        try:
+            self.port = serial.Serial(self.comPort.get())
+        except:
+            tkMessageBox.showwarning("Serial Error","Could not open serial port:\n\n"+self.comPort.get())
+            return
         self.calibrating = 0
         self.upperEnd = 0
         while self.calibrating<50:
@@ -92,6 +110,7 @@ class Application(Frame):
             self.upperEnd += temp/50.
             print "Calibrating Loaded",self.calibrating,":",str(temp)
             self.statusLabel["text"] = "Calibrating Loaded: "+str(self.calibrating*2)+"%"
+        self.port.close()
         
 
 
@@ -128,13 +147,16 @@ class Application(Frame):
         while self.logging:
             self.loggingCount += 1
             self.dataIn = self.port.readline()
+            newtons = float(self.dataIn)*self.gain - self.offset
             f = open(self.fName,'a+')
-            f.write(self.dataIn)
+            f.write(str(newtons)+"\n")
             f.close()
-            logMessage = "("+str(self.loggingCount/10.)+"s) - Raw: "+str(self.dataIn).rstrip('\n')
+            logMessage = "("+str(self.loggingCount/10.)+"s) - Raw: "+str(self.dataIn).rstrip('\n')+" | Newtons: "+str(newtons)
             print logMessage
             
-        self.statusLabel["text"] = "Data Logging Complete. Raw data saved to:",self.fName
+        self.port.close()
+            
+        self.statusLabel["text"] = "Data Logging Complete. Data saved to: "+self.fName
 
     def enableButtons(self):
         self.start['state'] = 'normal'
@@ -158,6 +180,11 @@ class Application(Frame):
         self.comPort = Entry(self)
         self.comPort.insert(0,"COM1")
         self.comPort.grid(row=0,column=2,pady=20,columnspan=2, padx=10)
+
+        self.testComButton = Button(self)
+        self.testComButton["text"] = "Test"
+        self.testComButton["command"] = self.testCom
+        self.testComButton.grid(row=0,column=4,pady=20,padx=20)
 
         self.fnameL = Label(self)
         self.fnameL["text"] = "Data log filename (.csv):\n**Will overwrite files**"
